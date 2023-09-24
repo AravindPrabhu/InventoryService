@@ -11,11 +11,15 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.edutrain.busbooking.inventory.model.InventoryModel;
 import com.edutrain.busbooking.inventory.model.InventoryModelWrapper;
 import com.edutrain.busbooking.inventory.repository.InventoryRepository;
 
+@RestController
+@RequestMapping("/inventory")
 public class InventoryController {
 
 	@Autowired
@@ -50,7 +54,7 @@ public class InventoryController {
 
 	}
 
-	@PostMapping("/addbusroute")
+	@PostMapping("/addinventory")
 	public String addInventoryModel(@RequestBody InventoryModel inventoryModel) {
 
 		String busNumber = inventoryModel.getBusNo();
@@ -75,7 +79,7 @@ public class InventoryController {
 
 	}
 
-	@GetMapping("/getbusroute/{BusNo}")
+	@GetMapping("/getinventory/{BusNo}")
 	public String getInventoryModel(@PathVariable String BusNo) {
 
 		Optional<InventoryModelWrapper> inventoryModelWrapperRetValue = inventoryRepository.findById(BusNo);
@@ -96,7 +100,7 @@ public class InventoryController {
 
 	}
 
-	@DeleteMapping("/deleteroute/{BusNo}")
+	@DeleteMapping("/deleteinventory/{BusNo}")
 	public String deleteInventoryModel(@PathVariable String BusNo) {
 		try {
 			inventoryRepository.deleteById(BusNo);
@@ -107,7 +111,7 @@ public class InventoryController {
 
 	}
 
-	@PutMapping("/updateeroute")
+	@PutMapping("/updateinventory")
 	public String updateInventoryModel(@RequestBody InventoryModel inventoryModel) {
 
 		String busNumber = inventoryModel.getBusNo();
