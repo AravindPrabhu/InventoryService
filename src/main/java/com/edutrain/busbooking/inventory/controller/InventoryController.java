@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jms.annotation.JmsListener;
+import org.springframework.jms.core.JmsMessagingTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,9 +16,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.edutrain.busbooking.inventory.model.BookPayment;
 import com.edutrain.busbooking.inventory.model.InventoryModel;
 import com.edutrain.busbooking.inventory.model.InventoryModelWrapper;
 import com.edutrain.busbooking.inventory.repository.InventoryRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 
 @RestController
 @RequestMapping("/inventory")
@@ -29,7 +35,13 @@ public class InventoryController {
 	InventoryModel inventoryModel;
 
 	@Autowired
+	BookPayment bookPayment;
+
+	@Autowired
 	private final InventoryRepository inventoryRepository;
+
+	@Autowired
+	private JmsMessagingTemplate jmsMessagingTemplate;
 
 	public InventoryController(InventoryRepository inventoryRepository) {
 		this.inventoryRepository = inventoryRepository;
@@ -45,9 +57,22 @@ public class InventoryController {
 			InventoryModelList.add(inventoryModelWrapper.getInventoryModel());
 		});
 
+		ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+
 		InventoryModelList.forEach((inventoryModel) -> {
-			stringRouteList.add("BusNo: " + inventoryModel.getBusNo() + ",availableSeats: "
-					+ inventoryModel.getAvailableSeats() + ", lastUpdtDate: " + inventoryModel.getLastUpdtDate());
+
+			String jsonString = null;
+
+			try {
+				jsonString = ow.writeValueAsString(inventoryModel);
+
+			} catch (JsonProcessingException e) {
+
+				e.printStackTrace();
+
+			}
+
+			stringRouteList.add(jsonString);
 		});
 
 		return stringRouteList;
@@ -88,10 +113,23 @@ public class InventoryController {
 
 			inventoryModelWrapper = inventoryModelWrapperRetValue.get();
 			inventoryModel = inventoryModelWrapper.getInventoryModel();
-			String InventoryModelStr = "BusNo: " + inventoryModel.getBusNo() + ",availableSeats: "
-					+ inventoryModel.getAvailableSeats() + ", lastUpdtDate: " + inventoryModel.getLastUpdtDate();
 
-			return InventoryModelStr;
+			/*
+			 * String InventoryModelStr = "BusNo: " + inventoryModel.getBusNo() +
+			 * ",availableSeats: " + inventoryModel.getAvailableSeats() + ", lastUpdtDate: "
+			 * + inventoryModel.getLastUpdtDate();
+			 */
+
+			ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+			String jsonString;
+			try {
+				jsonString = ow.writeValueAsString(inventoryModel);
+				return jsonString;
+			} catch (JsonProcessingException e) {
+
+				e.printStackTrace();
+				return "Exception occured";
+			}
 
 		} else {
 
@@ -138,6 +176,49 @@ public class InventoryController {
 
 				return "There is an error in updating  InventoryModel";
 			}
+		}
+
+	}
+
+	@JmsListener(destination = "PaymentToInventory")
+	public String ReceiveBookingAndProcessPayment(Object obj) {
+
+		try {
+			Thread.sleep(5000);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+
+		bookPayment = (BookPayment) obj;
+
+		inventoryModel.setAvailableSeats(String.valueOf(
+				Integer.parseInt(inventoryModel.getAvailableSeats()) - Integer.parseInt(bookPayment.getNoOfSeats())));
+		inventoryModel.setBusNo(bookPayment.getBusNo());
+		
+		updateInventoryModel(inventoryModel);
+
+		System.out.println("Message Received" + obj);
+
+		
+		SendMessageToBookingService(bookPayment);
+
+		return null;
+
+	}
+
+	private String SendMessageToBookingService(BookPayment bookPayment) {
+		// TODO Auto-generated method stub
+		jmsMessagingTemplate.convertAndSend("InventoryToBooking", bookPayment);
+
+		ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
+		String jsonString;
+		try {
+			jsonString = ow.writeValueAsString(bookPayment);
+			return jsonString;
+		} catch (JsonProcessingException e) {
+
+			e.printStackTrace();
+			return "Exception occured";
 		}
 
 	}
