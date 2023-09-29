@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.jms.core.JmsMessagingTemplate;
+import org.springframework.jms.core.JmsTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+
 import com.edutrain.busbooking.inventory.model.BookPayment;
 import com.edutrain.busbooking.inventory.model.InventoryModel;
 import com.edutrain.busbooking.inventory.model.InventoryModelWrapper;
@@ -23,6 +25,8 @@ import com.edutrain.busbooking.inventory.repository.InventoryRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 @RestController
 @RequestMapping("/inventory")
@@ -41,7 +45,9 @@ public class InventoryController {
 	private final InventoryRepository inventoryRepository;
 
 	@Autowired
-	private JmsMessagingTemplate jmsMessagingTemplate;
+	private JmsTemplate jmsTemplate;
+	
+	private static final Logger LOGGER = LogManager.getLogger(InventoryController.class);
 
 	public InventoryController(InventoryRepository inventoryRepository) {
 		this.inventoryRepository = inventoryRepository;
@@ -49,7 +55,7 @@ public class InventoryController {
 
 	@GetMapping("/getallinventory")
 	public List<String> getAllInventory() {
-
+		LOGGER.info("In getAllInventory");
 		List<InventoryModel> InventoryModelList = new ArrayList<InventoryModel>();
 		List<String> stringRouteList = new ArrayList<String>();
 
@@ -67,7 +73,7 @@ public class InventoryController {
 				jsonString = ow.writeValueAsString(inventoryModel);
 
 			} catch (JsonProcessingException e) {
-
+				LOGGER.error("Exception occured in getAllInventory"+e.getMessage());
 				e.printStackTrace();
 
 			}
@@ -81,9 +87,9 @@ public class InventoryController {
 
 	@PostMapping("/addinventory")
 	public String addInventoryModel(@RequestBody InventoryModel inventoryModel) {
-
+		LOGGER.info("In addInventoryModel");
 		String busNumber = inventoryModel.getBusNo();
-		System.out.println("BusNumber in addbusroute is " + busNumber);
+		LOGGER.debug("BusNumber in addbusroute is " + busNumber);
 
 		// InventoryModelWrapper inventoryModelWrapper= new InventoryModelWrapper();
 		inventoryModelWrapper.setBusNo(busNumber);
@@ -98,15 +104,16 @@ public class InventoryController {
 				return "There is an error in adding InventoryModel";
 			}
 		} catch (Exception e) {
-
+			LOGGER.error("Exception occured in addInventory"+e.getMessage());
 			return "There is an error in adding InventoryModel";
 		}
 
 	}
 
 	@GetMapping("/getinventory/{BusNo}")
-	public String getInventoryModel(@PathVariable String BusNo) {
+	public Object getInventoryModel(@PathVariable String BusNo) {
 
+		LOGGER.info("In getInventoryModel");
 		Optional<InventoryModelWrapper> inventoryModelWrapperRetValue = inventoryRepository.findById(BusNo);
 
 		if (inventoryModelWrapperRetValue.isPresent()) {
@@ -114,36 +121,23 @@ public class InventoryController {
 			inventoryModelWrapper = inventoryModelWrapperRetValue.get();
 			inventoryModel = inventoryModelWrapper.getInventoryModel();
 
-			/*
-			 * String InventoryModelStr = "BusNo: " + inventoryModel.getBusNo() +
-			 * ",availableSeats: " + inventoryModel.getAvailableSeats() + ", lastUpdtDate: "
-			 * + inventoryModel.getLastUpdtDate();
-			 */
-
-			ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-			String jsonString;
-			try {
-				jsonString = ow.writeValueAsString(inventoryModel);
-				return jsonString;
-			} catch (JsonProcessingException e) {
-
-				e.printStackTrace();
-				return "Exception occured";
-			}
+			return inventoryModel;
 
 		} else {
 
-			return "Route Not found";
+			return new String("Route Not found");
 		}
 
 	}
 
 	@DeleteMapping("/deleteinventory/{BusNo}")
 	public String deleteInventoryModel(@PathVariable String BusNo) {
+		LOGGER.info("In deleteInventoryModel");
 		try {
 			inventoryRepository.deleteById(BusNo);
 			return "Route Deleted successfully";
 		} catch (Exception e) {
+			LOGGER.error("Exception occured in deleteInventoryModel"+e.getMessage());
 			return "Error while deletion";
 		}
 
@@ -151,75 +145,89 @@ public class InventoryController {
 
 	@PutMapping("/updateinventory")
 	public String updateInventoryModel(@RequestBody InventoryModel inventoryModel) {
-
+		LOGGER.info("In updateInventoryModel");
 		String busNumber = inventoryModel.getBusNo();
-		System.out.println("BusNumber in addbusroute is " + busNumber);
-		String RetValue = getInventoryModel(busNumber);
+		LOGGER.debug("BusNumber in addbusroute is " + busNumber);
+		Object retValue = getInventoryModel(busNumber);
 
-		if (RetValue.equalsIgnoreCase("Route Not found")) {
-			return "Route Not found,Please enter valid route";
-		} else {
+		if (retValue.getClass().equals(String.class)) {
 
-			// InventoryModelWrapper inventoryModelWrapper= new InventoryModelWrapper();
-			inventoryModelWrapper.setBusNo(busNumber);
-			inventoryModelWrapper.setInventoryModel(inventoryModel);
-
-			try {
-				InventoryModelWrapper retValue = inventoryRepository.save(inventoryModelWrapper);
-
-				if (retValue != null) {
-					return "InventoryModel Updated successfully";
-				} else {
-					return "There is an error in updating InventoryModel";
-				}
-			} catch (Exception e) {
-
-				return "There is an error in updating  InventoryModel";
+			if (retValue.toString().equalsIgnoreCase("Route Not found")) {
+				return "Route Not found,Please enter valid route";
 			}
+
+		} else {
+			inventoryModel = (InventoryModel) retValue;
 		}
 
+		// InventoryModelWrapper inventoryModelWrapper= new InventoryModelWrapper();
+		inventoryModelWrapper.setBusNo(busNumber);
+		inventoryModelWrapper.setInventoryModel(inventoryModel);
+
+		try {
+			InventoryModelWrapper retValue1 = inventoryRepository.save(inventoryModelWrapper);
+
+			if (retValue1 != null) {
+				return "InventoryModel Updated successfully";
+			} else {
+				return "There is an error in updating InventoryModel";
+			}
+		} catch (Exception e) {
+			LOGGER.error("Exception occured in updateInventoryModel"+e.getMessage());
+			return "There is an error in updating  InventoryModel";
+		}
 	}
 
-	@JmsListener(destination = "PaymentToInventory")
-	public String ReceiveBookingAndProcessPayment(Object obj) {
+	
 
+	@JmsListener(destination = "PaymentToInventory")
+	public String ReceivePaymentAndSendInventory(String bookPaymentStr) {
+		LOGGER.info("In ReceiveBookingAndProcessPayment");
 		try {
 			Thread.sleep(5000);
 		} catch (InterruptedException e) {
+			LOGGER.error("Exception occured in ReceivePaymentAndSendInventory"+e.getMessage());
 			e.printStackTrace();
 		}
 
-		bookPayment = (BookPayment) obj;
+		LOGGER.debug("Message Received in ReceivePaymentAndSendInventory " + bookPaymentStr);
+		try {
+			bookPayment =  new ObjectMapper().readValue(bookPaymentStr, BookPayment.class);
+		} catch (JsonProcessingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		LOGGER.debug("bookPayment object  Received" + bookPayment);
 
 		inventoryModel.setAvailableSeats(String.valueOf(
 				Integer.parseInt(inventoryModel.getAvailableSeats()) - Integer.parseInt(bookPayment.getNoOfSeats())));
 		inventoryModel.setBusNo(bookPayment.getBusNo());
-		
-		updateInventoryModel(inventoryModel);
 
-		System.out.println("Message Received" + obj);
+		updateInventoryModel(inventoryModel);	
 
-		
 		SendMessageToBookingService(bookPayment);
 
 		return null;
 
 	}
 
-	private String SendMessageToBookingService(BookPayment bookPayment) {
+	private void SendMessageToBookingService(BookPayment bookPayment) {
 		// TODO Auto-generated method stub
-		jmsMessagingTemplate.convertAndSend("InventoryToBooking", bookPayment);
-
-		ObjectWriter ow = new ObjectMapper().writer().withDefaultPrettyPrinter();
-		String jsonString;
+		LOGGER.info("In SendMessageToBookingService");		
+		String bookPaymentStr = null;
 		try {
-			jsonString = ow.writeValueAsString(bookPayment);
-			return jsonString;
+			ObjectWriter objWriter = new ObjectMapper().writer().withDefaultPrettyPrinter();
+			bookPaymentStr = objWriter.writeValueAsString(bookPayment);
 		} catch (JsonProcessingException e) {
-
+			// TODO Auto-generated catch block
+			LOGGER.error("Exception occured in SendMessageToBookingService"+e.getMessage());
 			e.printStackTrace();
-			return "Exception occured";
 		}
+
+		LOGGER.debug(" BookPayment  " + bookPaymentStr);
+		
+		jmsTemplate.convertAndSend("InventoryToBooking", bookPaymentStr);
 
 	}
 
